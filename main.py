@@ -57,7 +57,7 @@ dataThread = threading.Thread(target=getdata)
 if __name__=='__main__':
     dataThread.start()
 
-    time.sleep(2)
+    time.sleep(3)
     print('\nWybierz stopień ryzyka: \n')
     print('1: Duże ryzyko (2h)')
     print('2: Średnie ryzyko (4h)')

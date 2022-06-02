@@ -102,8 +102,6 @@ class runTime:
         userAssets = client.get_margin_account()["userAssets"]
         for asset in userAssets:
             if float(asset['free']) > 0 and asset['asset'] != "USDT" and asset['asset'] != 'BNB' and list(df.keys()).count(asset['asset']+'USDT') > 0 and float(asset['free']) > float(client.get_symbol_info(asset['asset']+"USDT")["filters"][2]["minQty"]):
-                print(asset)
-                print(float(client.get_symbol_info(asset['asset']+"USDT")["filters"][2]["minQty"]))
                 currentHoldList.append(asset['asset'])
         while True:
             # global currentHoldList
@@ -175,7 +173,9 @@ def balanceAmounts(client, buylist):
 class runBot:
     def botLaunch(self, df, timeframe, client):
         createThreads(timeframe, df, client)
+        time.sleep(5)
         while True:
+            print("\n\n")
             print(time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()))
             print("Current hold list: ", currentHoldList)
             time.sleep(timeframe*60*10)
