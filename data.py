@@ -6,9 +6,14 @@ from binance.client import Client
 from datetime import datetime
 import threading
 import pandas as pd
+import json
 
-api_key = "m6YdLl0Qktx64WKwD2qCFGzfqlxbs2Yji43rW1GP6JvVBAnERXjasAYjbxNEUzhH"
-api_secret = "iDEBNognV3PYy2Jty0gHX1VK7DvtzRLmCBNUy0ruF3OcOKBPyD2jnK5dnrWf7sAe"
+with open('./data.json') as f:
+  credentials = json.load(f)
+
+api_key = credentials['api_key']
+api_secret = credentials['api_secret']
+client = Client(api_key, api_secret)
 client = Client(api_key, api_secret)
 
 # , 'ETHUSDT', 'ADAUSDT', 'SOLUSDT', 'DOTUSDT', 'LTCUSDT', 'LINKUSDT', 'ICPUSDT', 'CAKEUSDT'
