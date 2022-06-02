@@ -1,52 +1,63 @@
 from binance.client import Client
 import time
 import os
-import data
+import fetchData
 import threading
 import bot
 import json
 
 # binance-python setup
 with open('./data.json') as f:
-  credentials = json.load(f)
+  data = json.load(f)
 
-api_key = credentials['api_key']
-api_secret = credentials['api_secret']
+api_key = data['api_key']
+api_secret = data['api_secret']
 client = Client(api_key, api_secret)
 
-# crypto list
-cryptolist = ['BTCUSDT', 'ETHUSDT', 'ADAUSDT', 'SOLUSDT', 'DOTUSDT', 'LTCUSDT', 'LINKUSDT', 'ICPUSDT', 'CAKEUSDT']
+marginAccountData = client.get_margin_account()
 
-getData = data.getData()
+cryptolist = [] 
+wrongList = []
+
+#filtering wrong cryptos
+unfilteredCryptoList = data["crypto_list"]
+for crypto in unfilteredCryptoList:
+    if next((item for item in marginAccountData['userAssets'] if item["asset"] == crypto), None):
+        cryptolist.append(crypto)
+    else:
+        wrongList.append(crypto)
+
+dataCryptoList = cryptolist
+
+#Leave only 10 cryptos
+cryptolist = cryptolist[0:10]
+
+getData = fetchData.getData()
 bot = bot.runBot()
+
 currentData = []
-temp = []
 
 def getdata():
     while True:
         global currentData
-        currentData = getData.getDataF()
+        currentData = getData.getDataF(client, cryptolist)
+        time.sleep(60)
 
 def createThreads(timeframe):
     thread = threading.Thread(target=main, args=(timeframe,))
     thread.start()
 
 def main(timeframe):
-    bot.botLaunch(currentData[timeframe]['BTCUSDT'], timeframe)
+    bot.botLaunch(currentData[timeframe], timeframe, client)
 
-# def check():
-#     while True:
-#         print("Check: ",currentData[4]['BTCUSDT'].tail(1))
-#         # print("Checktemp: ",temp[4])
-#         time.sleep(0.1)
-
+# Create data thread
 dataThread = threading.Thread(target=getdata)
-# checkThread = threading.Thread(target=check)
 
 # Run script
 if __name__=='__main__':
     dataThread.start()
-    time.sleep(5)
+
+    time.sleep(2)
     print('\nWybierz stopień ryzyka: \n')
     print('1: Duże ryzyko (2h)')
     print('2: Średnie ryzyko (4h)')

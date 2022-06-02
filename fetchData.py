@@ -1,42 +1,28 @@
 import math
-from tracemalloc import start
 import numpy
 import time
 from binance.client import Client
 from datetime import datetime
 import threading
 import pandas as pd
-import json
 
-with open('./data.json') as f:
-  credentials = json.load(f)
-
-api_key = credentials['api_key']
-api_secret = credentials['api_secret']
-client = Client(api_key, api_secret)
-client = Client(api_key, api_secret)
-
-# , 'ETHUSDT', 'ADAUSDT', 'SOLUSDT', 'DOTUSDT', 'LTCUSDT', 'LINKUSDT', 'ICPUSDT', 'CAKEUSDT'
-
-symbols = ['BTCUSDT']
 timeframes = [2, 4, 24]
 timeframesdict = {2: Client.KLINE_INTERVAL_2HOUR, 4: Client.KLINE_INTERVAL_4HOUR, 12: Client.KLINE_INTERVAL_12HOUR, 24: Client.KLINE_INTERVAL_1DAY}
 
 dict = {}
 
-def getDataFrames(timeframe, startDate):
+def getDataFrames(timeframe, startDate, symbols, client):
     subThreads = []
     dict[timeframe] = {}
     for symbol in symbols:
         startDate = datetime.strftime(datetime.fromtimestamp(int(time.time()) - (math.ceil((timeframe*54)/24))*86400), "%Y %m %d").replace(" ", "-")
-        t = threading.Thread(target=getDataSymbols, args=(timeframe, symbol, startDate))
+        t = threading.Thread(target=getDataSymbols, args=(timeframe, symbol, startDate, client))
         t.start()
         subThreads.append(t)
-
     for t in subThreads:
         t.join()
 
-def getDataSymbols(timeframe, symbol, startDate):
+def getDataSymbols(timeframe, symbol, startDate, client):
     fullList = numpy.array(client.get_historical_klines(symbol, timeframesdict[timeframe], startDate))
     shortList = []
     for i in fullList:
@@ -61,11 +47,14 @@ def calc(df):
     return df
 
 class getData:
-    def getDataF(self):
+    def getDataF(self, client, cryptolist):
+        symbols = []
+        for symbol in cryptolist:
+            symbols.append(symbol+"USDT")
         threads = []
         for timeframe in timeframes:
             startDate = datetime.strftime(datetime.fromtimestamp(int(time.time()) - (math.ceil((timeframe*54)/24))*86400), "%Y %m %d").replace(" ", "-")
-            t = threading.Thread(target=getDataFrames, args=(timeframe, startDate,))
+            t = threading.Thread(target=getDataFrames, args=(timeframe, startDate, symbols, client))
             t.start()
             threads.append(t)
         for t in threads:

@@ -1,20 +1,12 @@
 import time
-from binance.client import Client
 import math
 import threading
-import json
 
-with open('./data.json') as f:
-  credentials = json.load(f)
-
-api_key = credentials['api_key']
-api_secret = credentials['api_secret']
-client = Client(api_key, api_secret)
-
-BUY_TRESHOLD = 40
-SELL_TRESHOLD = 40
+BUY_TRESHOLD = 20
 
 currentHoldList = []
+
+initialBuy = True
 
 def sellCrypto(client, symbol):
     symbolName = symbol + 'USDT'
@@ -37,22 +29,21 @@ def sellCrypto(client, symbol):
     else:
         print("Not enough free ", symbol)
 
-def buyCrypto(client):
-    borrowMargin(client)
+def buyCrypto(client, symbol, amount):
     time.sleep(5)
+    symbolName = symbol
+    currentBalance = float(next(item for item in client.get_margin_account()['userAssets'] if item["asset"] == 'USDT')['free']) / amount
+    stepSize = client.get_symbol_info(symbolName)["filters"][2]["stepSize"]
 
-    currentBalance = float(next(item for item in client.get_margin_account()['userAssets'] if item["asset"] == 'USDT')['free'])
-    stepSize = client.get_symbol_info('BTCUSDT')["filters"][2]["stepSize"]
-
-    if currentBalance > BUY_TRESHOLD:
-        currentBuy = currentBalance / float(client.get_avg_price(symbol='BTCUSDT')['price'])
-        rquantity = round(math.floor(currentBuy/float(stepSize))*float(stepSize), 10)
-        client.create_margin_order(
-            symbol='BTCUSDT',
-            side="BUY",
-            type="MARKET",
-            quantity=rquantity
-        )
+    currentBuy = currentBalance / float(client.get_avg_price(symbol=symbolName)['price'])
+    rquantity = round(math.floor((0.98 * currentBuy)/float(stepSize))*float(stepSize), 10)
+    client.create_margin_order(
+        symbol=symbolName,
+        side="BUY",
+        type="MARKET",
+        quantity=rquantity
+    )
+    print("Bought ", rquantity, " of ", symbol)
 
 def borrowMargin(client):
     maxLoan = round(math.floor(float(client.get_max_margin_loan(asset='USDT')['amount']) * 100) / 100, 2)
@@ -99,7 +90,7 @@ def handleSell(client, asset, timeframe, df):
     if checkBuy(df) != "Buy":
         sellCrypto(client, asset)
 
-def createThreads(timeframe, df):
+def createThreads(timeframe, df, client):
     holdThread = threading.Thread(target=runTime().handleHold, args=(client, timeframe, df))
     holdThread.start()
     buyThread = threading.Thread(target=runTime().handleBuy, args=(client, df,))
@@ -110,7 +101,9 @@ class runTime:
         global currentHoldList
         userAssets = client.get_margin_account()["userAssets"]
         for asset in userAssets:
-            if float(asset['free']) > 0 and asset['asset'] != "USDT" and asset['asset'] != 'BNB':
+            if float(asset['free']) > 0 and asset['asset'] != "USDT" and asset['asset'] != 'BNB' and list(df.keys()).count(asset['asset']+'USDT') > 0 and float(asset['free']) > float(client.get_symbol_info(asset['asset']+"USDT")["filters"][2]["minQty"]):
+                print(asset)
+                print(float(client.get_symbol_info(asset['asset']+"USDT")["filters"][2]["minQty"]))
                 currentHoldList.append(asset['asset'])
         while True:
             # global currentHoldList
@@ -119,12 +112,12 @@ class runTime:
             # Checking if there is any asset in the account and if there is it is adding it to the list.
             currentHoldList = []
             for asset in userAssets:
-                if float(asset['free']) > 0 and asset['asset'] != "USDT" and asset['asset'] != 'BNB':
+                if float(asset['free']) > 0 and asset['asset'] != "USDT" and asset['asset'] != 'BNB' and list(df.keys()).count(asset['asset']+'USDT') > 0 and float(asset['free']) > float(client.get_symbol_info(asset['asset']+"USDT")["filters"][2]["minQty"]):
                     currentHoldList.append(asset['asset'])
             
             sellThreadList = []
             for asset in currentHoldList:
-                if checkBuy(df) != "Buy":
+                if checkBuy(df[asset+"USDT"]) != "Buy":
                     sellThread = threading.Thread(target=handleSell, args=(client, asset, timeframe, df))
                     sellThread.start()
                     sellThreadList.append(sellThread)
@@ -133,19 +126,56 @@ class runTime:
             for thread in sellThreadList:
                 thread.join()
 
-            time.sleep(5)
+            time.sleep(15)
 
     def handleBuy(self, client, df):
         while True:
-            if checkBuy(df) == 'Buy':
-                buyCrypto(client)
-            time.sleep(5)
+            buylist = []
+            if float(next(item for item in client.get_margin_account()['userAssets'] if item["asset"] == 'USDT')['free']) > BUY_TRESHOLD:
+                for asset in df:
+                    if checkBuy(df[asset]) == 'Buy':
+                        buylist.append(asset)
+                        # buyCrypto(client)
+                if len(buylist) > 0:
+                    borrowMargin(client)
+                currentBalance = float(next(item for item in client.get_margin_account()['userAssets'] if item["asset"] == 'USDT')['free'])
+                buyNumber = math.floor(currentBalance / BUY_TRESHOLD)
+                if buyNumber > 0:
+                    buylist = buylist[:buyNumber]
+                    if len(buylist) != len(currentHoldList):
+                        accountValue = getAccountValue(client, df)
+                        if accountValue > 0:
+                            balanceAmounts(client, buylist)
+                        else:
+                            for asset in buylist:
+                                buyCrypto(client, asset, len(buylist))
+            time.sleep(60)
 
+def getAccountValue(client, df):
+    userAssets = client.get_margin_account()["userAssets"]
+    accountValue = 0
+    for asset in userAssets:
+        if list(df.keys()).count(asset['asset']+'USDT') > 0 and float(asset['free']) > float(client.get_symbol_info(asset['asset']+'USDT')["filters"][2]["minQty"]) and asset['asset'] != "USDT" and asset['asset'] != 'BNB':
+            accountValue += float(asset['free'])
+    return accountValue
+
+def balanceAmounts(client, buylist):
+    userAssets = client.get_margin_account()["userAssets"]
+    soldList = []
+    boughtList = []
+    for asset in userAssets:
+        if buylist.count(asset['asset']) > 0:
+            sellCrypto(client, asset['asset'])
+            soldList.append(asset['asset'])
+    for asset in buylist:
+        buyCrypto(client, asset, len(buylist))
+        boughtList.append(asset)
+
+    print("Balancing... \n\n Sold: ", soldList, "\nBought: ", boughtList)
 class runBot:
-    def botLaunch(self, df, timeframe):
-        createThreads(timeframe, df)
+    def botLaunch(self, df, timeframe, client):
+        createThreads(timeframe, df, client)
         while True:
             print(time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()))
             print("Current hold list: ", currentHoldList)
-            print("Current status: ", checkBuy(df))
             time.sleep(timeframe*60*10)

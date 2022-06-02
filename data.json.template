@@ -1,4 +1,9 @@
 {
     "api_key": "apikey",
-    "api_secret": "apisecret"
+    "api_secret": "apisecret",
+    "crypto_list": [
+        "crypto_symbol (ex. BTC)",
+        "next_crypto",
+        "max 10 cryptos!, the rest will be ignored"
+    ]
 }
